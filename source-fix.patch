@@ -1,0 +1,24 @@
+diff --git a/src/xenia/cpu/backend/x64/x64_code_cache_posix.cc b/src/xenia/cpu/backend/x64/x64_code_cache_posix.cc
+--- a/src/xenia/cpu/backend/x64/x64_code_cache_posix.cc
++++ b/src/xenia/cpu/backend/x64/x64_code_cache_posix.cc
+@@ -156,6 +156,18 @@
+   void* unwind_execute_address = unwind_reservation.entry_address -
+                                  generated_code_write_base_ +
+                                  generated_code_execute_base_;
+-  __register_frame(unwind_execute_address);
+-  registered_frames_.push_back(unwind_execute_address);
++#if XE_PLATFORM_PS5
++  // The PS5 SDK links LLVM libunwind, whose __register_frame accepts one
++  // FDE, unlike libgcc's API that scans a whole CIE/FDE sequence. Passing
++  // the CIE silently fails to register JIT frames and aborts fiber reentry.
++  // Retain the same FDE pointer for matching __deregister_frame cleanup.
++  uint32_t cie_length;
++  std::memcpy(&cie_length, unwind_execute_address, sizeof(cie_length));
++  void* registration = static_cast<uint8_t*>(unwind_execute_address) +
++                       sizeof(cie_length) + cie_length;
++#else
++  void* registration = unwind_execute_address;
++#endif
++  __register_frame(registration);
++  registered_frames_.push_back(registration);
+ }
